@@ -1,5 +1,5 @@
 /*
-   IR NEC protocol reader (38kHz, TSOPxxx) and 8 pin out for Pioneer AVIC-F840BT car stereo and Pioneer remote controller.
+   IR NEC protocol reader (38kHz, TSOPxxx) and 8 pin out for Pioneer AVIC-F840BT car stereo and Pioneer remote controller QXE1047 CXC8885 CXE3669 QXA3196.
    ATtiny2313, MCU Settings: FUSE_L=0xE4, FUSE_H=0xDF, FUSE_E=0xFF, F_CPU=8MHz internal 14CK+65 ms
 */
 
@@ -195,7 +195,7 @@ void IrProcess() {
   }
 }
 
-void OutPort(uint8_t OutPortB, uint8_t OutPortD)  // out portB resistor , if true out ShiftPort, set out flag and time
+void OutPort(uint8_t OutPortB, uint8_t OutPortD)  // OutPortB (resistors pins) to portB, if true OutPortD out ShiftPort, set out flag and time
 {
   PORTB |= _BV(OutPortB);
   if (OutPortD == true) {
@@ -205,37 +205,41 @@ void OutPort(uint8_t OutPortB, uint8_t OutPortD)  // out portB resistor , if tru
   OffCounter = 0;
 }
 
+// on signal on PD2 interrupt
 ISR(INT0_vect) {
   IrProcess();
 }
 
+// on timer interrupt (every 1/38222 s)
 ISR(TIMER0_COMPA_vect) {
   if (IrCounter++ > 10000)
     IrEvent = IrEventIdle;
 
   if (IrTimeout && --IrTimeout == 0)
     IrEvent = IrEventIdle;
+   
   OffCounter++;
 }
 
 void setup() {
+   
+  // setup output for portB 0-7 and portD 6  
   DDRB |= _BV(Resistor1k2) | _BV(Resistor3k3) | _BV(Resistor5k6) | _BV(Resistor8k2) | _BV(Resistor12k) | _BV(Resistor15k) | _BV(Resistor24k) | _BV(Resistor68k);
   DDRD |= _BV(ShiftPort);
 
   DDRD &= ~_BV(IrInPin);   // set IrInPin as INPUT
   PORTD &= ~_BV(IrInPin);  // set LOW level to IrInPin
 
+  // setup timer interrupt 
   TCNT0 = 0;            // Count up from 0
   TCCR0A = 2 << WGM00;  // CTC mode
-
   TCCR0B = (1 << CS00);  // Set prescaler to /1
-
   GTCCR |= 1 << PSR10;  // Reset prescaler
   OCR0A = 104;          // set OCR0n to get ~38.222kHz timer frequency, 104 for 8MHz
   TIFR = 1 << OCF0A;    // Clear output compare interrupt flag
-
   TIMSK |= 1 << OCIE0A;  // Enable output compare interrupt
-
+   
+  // setup interrupt for IR sensor
   GIMSK |= _BV(INT0);    // enable INT0 interrupt handler
   MCUCR &= ~_BV(ISC01);  // trigger INTO interrupt on raising
   MCUCR |= _BV(ISC00);   // and falling edge
